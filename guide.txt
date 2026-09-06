@@ -1,0 +1,9 @@
+Este rate limiter vai se comportar como um middle man, passando as requisições pro servidor
+conforme a estratégia utiizada. Dado esta abordagem, o rate limiter é na verdade apenas uma
+função 
+
+Allow(key) -> bool 
+
+que passa a request pro servidor conforme a estratégia utilizada
+
+invariante : allow() retorna true se houver um token disponível, se não, false
