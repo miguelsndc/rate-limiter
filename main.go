@@ -1,37 +1,41 @@
 package main
 
 import (
-	"fmt"
-	"math/rand/v2"
+	"log"
+	"net"
+	"net/http"
 	"rate-limiter/policies"
-	"sync"
+	"strconv"
 	"time"
 )
 
-func getKey() string {
-	keys := []string{"miguel", "samuel", "gustavo", "dyers", "wesley"}
-	index := rand.IntN(len(keys))
-	return keys[index]
-}
-
-func worker(id int, key string, lim *policies.Limiter) {
-	for range 10 {
-		if lim.Allow(key) {
-			fmt.Printf("%d: worker with key %s allowed at %v\n", id, key, time.Now())
-		} else {
-			fmt.Printf("%d: worker with key %s denied at %v\n", id, key, time.Now())
+func RateLimiterMiddleware(lim *policies.Limiter, next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func (w http.ResponseWriter, r *http.Request) {
+		ip, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			http.Error(w, "Invalid remote address", http.StatusInternalServerError)
+			return
 		}
-		time.Sleep(200 * time.Millisecond)
-	}
+		key := ip
+		if !lim.Allow(key) {
+			http.Error(w, "Too many requests.", http.StatusTooManyRequests)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
-func main() {
-	lim := policies.NewLimiter(5, 400*time.Millisecond)
-	var wg sync.WaitGroup
-	for i := range 100 {
-		wg.Go(func() {
-			worker(i, getKey(), lim)
-		})
-	}
-	wg.Wait()
+func baseHandler (w http.ResponseWriter, r* http.Request) {
+	w.Write([]byte("Hit\n"))
+}
+
+const PORT = 3000
+func main () {
+	lim := policies.NewLimiter(8, 300 * time.Millisecond)
+	mux := http.NewServeMux()
+	mux.Handle("/", RateLimiterMiddleware(lim, http.HandlerFunc(baseHandler)))
+	log.Println("Listening at port: ", PORT)
+	actualPort := ":" + strconv.Itoa(PORT)
+	err := http.ListenAndServe(actualPort, mux)
+	log.Fatal(err)
 }
