@@ -25,7 +25,7 @@ func createBucket(capacity int) *Bucket {
 	}
 }
 
-func (l *Limiter) Allow(key string) bool {
+func (l *Limiter) Allow(key string) (bool, time.Duration) {
 	l.mu.Lock()
 	bucket, exists := l.buckets[key]
 	if !exists {
@@ -45,10 +45,11 @@ func (l *Limiter) Allow(key string) bool {
 		bucket.lastRefill = bucket.lastRefill.Add(time.Duration(refilled) * l.refillInterval)
 	}
 	if bucket.tokens == 0 {
-		return false
+		retryAfter := bucket.lastRefill.Add(l.refillInterval).Sub(now)
+		return false, retryAfter
 	}
 	bucket.tokens--
-	return true
+	return true, 0
 }
 
 func NewLimiter(capacity int, refillInterval time.Duration) *Limiter {
