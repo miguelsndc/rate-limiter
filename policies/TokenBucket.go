@@ -1,21 +1,27 @@
 package policies
 
 import (
+	"context"
 	"sync"
 	"time"
 )
 
+type Config struct {
+	Capacity       int
+	RefillInterval time.Duration
+	Wait           bool
+}
+
 type Bucket struct {
-	mu sync.Mutex
+	mu         sync.Mutex
 	tokens     int
 	lastRefill time.Time
 }
 
-type Limiter struct {
-	mu sync.Mutex
-	capacity       int
-	refillInterval time.Duration
-	buckets        map[string]*Bucket
+type TokenBucketLimiter struct {
+	mu      sync.Mutex
+	config  Config
+	buckets map[string]*Bucket
 }
 
 func createBucket(capacity int) *Bucket {
@@ -25,37 +31,79 @@ func createBucket(capacity int) *Bucket {
 	}
 }
 
-func (l *Limiter) Allow(key string) (bool, time.Duration) {
+func (l *TokenBucketLimiter) getBucket(key string) *Bucket {
 	l.mu.Lock()
+	defer l.mu.Unlock()
 	bucket, exists := l.buckets[key]
 	if !exists {
-		bucket = createBucket(l.capacity)
+		bucket = createBucket(l.config.Capacity)
 		l.buckets[key] = bucket
 	}
-	l.mu.Unlock()
+	return bucket
+}
 
+func (l *TokenBucketLimiter) Wait(ctx context.Context, key string) error {
+	bucket := l.getBucket(key)
 	bucket.mu.Lock()
-	defer bucket.mu.Unlock()
-
 	now := time.Now()
 	elapsed := now.Sub(bucket.lastRefill)
-	refilled := int(elapsed / l.refillInterval)
-	bucket.tokens = min(l.capacity, bucket.tokens+refilled)
+	refilled := int(elapsed / l.config.RefillInterval)
+	bucket.tokens = min(l.config.Capacity, bucket.tokens+refilled)
 	if refilled > 0 {
-		bucket.lastRefill = bucket.lastRefill.Add(time.Duration(refilled) * l.refillInterval)
+		bucket.lastRefill = bucket.lastRefill.Add(time.Duration(refilled) * l.config.RefillInterval)
+	}
+
+	var waitTime time.Duration
+	if bucket.tokens > 0 {
+		bucket.tokens--
+	} else {
+		nextAvailable := bucket.lastRefill.Add(l.config.RefillInterval)
+		waitTime = nextAvailable.Sub(now)
+		bucket.lastRefill = nextAvailable
+	}
+	bucket.mu.Unlock()
+
+	if waitTime == 0 {
+		return nil
+	}
+
+	timer := time.NewTimer(waitTime)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func (l *TokenBucketLimiter) Allow(key string) (bool, time.Duration) {
+	bucket := l.getBucket(key)
+	bucket.mu.Lock()
+	defer bucket.mu.Unlock()
+	now := time.Now()
+	elapsed := now.Sub(bucket.lastRefill)
+	refilled := int(elapsed / l.config.RefillInterval)
+	bucket.tokens = min(l.config.Capacity, bucket.tokens+refilled)
+	if refilled > 0 {
+		bucket.lastRefill = bucket.lastRefill.Add(time.Duration(refilled) * l.config.RefillInterval)
 	}
 	if bucket.tokens == 0 {
-		retryAfter := bucket.lastRefill.Add(l.refillInterval).Sub(now)
+		retryAfter := bucket.lastRefill.Add(l.config.RefillInterval).Sub(now)
 		return false, retryAfter
 	}
 	bucket.tokens--
 	return true, 0
 }
 
-func NewLimiter(capacity int, refillInterval time.Duration) *Limiter {
-	return &Limiter{
-		capacity:       capacity,
-		refillInterval: refillInterval,
+func NewTokenBucketLimiter(cfg Config) *TokenBucketLimiter {
+	return &TokenBucketLimiter{
+		config:  cfg,
 		buckets: make(map[string]*Bucket),
 	}
+}
+
+func (l *TokenBucketLimiter) ShouldWait() bool {
+	return l.config.Wait
 }

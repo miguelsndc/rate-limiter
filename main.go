@@ -11,44 +11,61 @@ import (
 	"time"
 )
 
-func RateLimiterMiddleware(lim *policies.Limiter, next http.HandlerFunc) http.HandlerFunc {
-	return http.HandlerFunc(func (w http.ResponseWriter, r *http.Request) {
+func RateLimiterMiddleware(lim policies.RateLimiter, next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ip, _, err := net.SplitHostPort(r.RemoteAddr)
 		if err != nil {
 			http.Error(w, "Invalid remote address", http.StatusInternalServerError)
 			return
 		}
 		key := ip
-		allowed, retryAfter := lim.Allow(key)
-		if !allowed {
-			retryAfterInSeconds := strconv.Itoa(int(math.Ceil(retryAfter.Seconds())))
-			w.Header().Set("Retry-After", retryAfterInSeconds)
-			http.Error(w, "Too many requests.", http.StatusTooManyRequests)
-			return
+		if lim.ShouldWait() {
+			err = lim.Wait(r.Context(), ip)
+			if err != nil {
+				http.Error(w, "Request canceled or timed out", http.StatusRequestTimeout)
+				return
+			}
+			next.ServeHTTP(w, r)
+		} else {
+			allowed, retryAfter := lim.Allow(key)
+			if !allowed {
+				retryAfterInSeconds := strconv.Itoa(int(math.Ceil(retryAfter.Seconds())))
+				w.Header().Set("Retry-After", retryAfterInSeconds)
+				http.Error(w, "Too many requests.", http.StatusTooManyRequests)
+				return
+			}
+			next.ServeHTTP(w, r)
 		}
-		next.ServeHTTP(w, r)
 	})
 }
 
-func baseHandler (w http.ResponseWriter, r* http.Request) {
+func baseHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("Hit\n"))
+	time.Sleep(200 * time.Millisecond)
 }
 
-const REFILL_INTERVAL_MS = 300
-const BUCKET_CAPACITY = 1
+const PORT = 3000
+const RATE_LIMITER_CAPACITY = 5
+const RATE_LIMITER_REFILL_INTERVAL_MS = 2000
+
 func SetupServer(port int, done chan struct{}) {
-	lim := policies.NewLimiter(BUCKET_CAPACITY, REFILL_INTERVAL_MS * time.Millisecond)
+	cfg := policies.Config{
+		Capacity:       RATE_LIMITER_CAPACITY,
+		RefillInterval: RATE_LIMITER_REFILL_INTERVAL_MS * time.Millisecond,
+		Wait:           true,
+	}
+	lim := policies.NewTokenBucketLimiter(cfg)
 	mux := http.NewServeMux()
 	mux.Handle("/", RateLimiterMiddleware(lim, http.HandlerFunc(baseHandler)))
 	actualPort := ":" + strconv.Itoa(port)
-	
+
 	listener, err := net.Listen("tcp", actualPort)
-	
+
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	log.Println("Listening at port: ", port)    
+	log.Println("Listening at port: ", port)
 	close(done)
 
 	err = http.Serve(listener, mux)
@@ -70,11 +87,11 @@ func request(url string) {
 	}
 }
 
-func main () {
+func main() {
 	done := make(chan struct{})
-    go SetupServer(3000, done)
+	go SetupServer(PORT, done)
 	<-done
-	request("http://localhost:3000")
-	request("http://localhost:3000")
-	request("http://localhost:3000")
+	for range 10 {
+		request("http://localhost:3000")
+	}
 }
