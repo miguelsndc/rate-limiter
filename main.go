@@ -8,10 +8,29 @@ import (
 	"net/http"
 	"rate-limiter/policies"
 	"strconv"
-	"time"
+	"sync"
 )
 
-func RateLimiterMiddleware(lim policies.RateLimiter, next http.HandlerFunc) http.HandlerFunc {
+func WaiterMiddleware(lim policies.RateLimiterWaiter, next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ip, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			http.Error(w, "Invalid remote address", http.StatusInternalServerError)
+			return
+		}
+		if err := lim.Wait(r.Context(), ip); err != nil {
+			http.Error(
+				w,
+				"Request canceled or timed out",
+				http.StatusRequestTimeout,
+			)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func PolicerMiddleware(lim policies.RateLimiterPolicer, next http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ip, _, err := net.SplitHostPort(r.RemoteAddr)
 		if err != nil {
@@ -19,44 +38,31 @@ func RateLimiterMiddleware(lim policies.RateLimiter, next http.HandlerFunc) http
 			return
 		}
 		key := ip
-		if lim.ShouldWait() {
-			err = lim.Wait(r.Context(), ip)
-			if err != nil {
-				http.Error(w, "Request canceled or timed out", http.StatusRequestTimeout)
-				return
-			}
-			next.ServeHTTP(w, r)
-		} else {
-			allowed, retryAfter := lim.Allow(key)
-			if !allowed {
-				retryAfterInSeconds := strconv.Itoa(int(math.Ceil(retryAfter.Seconds())))
-				w.Header().Set("Retry-After", retryAfterInSeconds)
-				http.Error(w, "Too many requests.", http.StatusTooManyRequests)
-				return
-			}
-			next.ServeHTTP(w, r)
+		allowed, retryAfter := lim.Allow(key)
+		if !allowed {
+			retryAfterInSeconds := strconv.Itoa(int(math.Ceil(retryAfter.Seconds())))
+			w.Header().Set("Retry-After", retryAfterInSeconds)
+			http.Error(w, "Too many requests.", http.StatusTooManyRequests)
+			return
 		}
+		next.ServeHTTP(w, r)
 	})
 }
 
 func baseHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("Hit\n"))
-	time.Sleep(200 * time.Millisecond)
 }
 
 const PORT = 3000
-const RATE_LIMITER_CAPACITY = 5
-const RATE_LIMITER_REFILL_INTERVAL_MS = 2000
 
 func SetupServer(port int, done chan struct{}) {
-	cfg := policies.Config{
-		Capacity:       RATE_LIMITER_CAPACITY,
-		RefillInterval: RATE_LIMITER_REFILL_INTERVAL_MS * time.Millisecond,
-		Wait:           true,
+	cfg := policies.LeakyBucketConfig{
+		Capacity: 5,
+		LeakRate: 1,
 	}
-	lim := policies.NewTokenBucketLimiter(cfg)
+	lim := policies.NewLeakyBucketLimiter(cfg)
 	mux := http.NewServeMux()
-	mux.Handle("/", RateLimiterMiddleware(lim, http.HandlerFunc(baseHandler)))
+	mux.Handle("/", PolicerMiddleware(lim, http.HandlerFunc(baseHandler)))
 	actualPort := ":" + strconv.Itoa(port)
 
 	listener, err := net.Listen("tcp", actualPort)
@@ -72,26 +78,27 @@ func SetupServer(port int, done chan struct{}) {
 	log.Fatal(err)
 }
 
-func request(url string) {
-	resp, err := http.Get(url)
-	if err != nil {
-		log.Fatal(err)
+func burst(n int) {
+	var wg sync.WaitGroup
+	url := fmt.Sprintf("http://localhost:%d", PORT)
+	wg.Add(n)
+	for i := range n {
+		go func(i int) {
+			defer wg.Done()
+			resp, err := http.Get(url)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			defer resp.Body.Close()
+			fmt.Printf("%02d -> %d\n", i, resp.StatusCode)
+		}(i)
 	}
-	defer resp.Body.Close()
-	fmt.Println("--- Response Headers ---")
-	fmt.Println(resp.StatusCode)
-	for key, values := range resp.Header {
-		for _, value := range values {
-			fmt.Printf("%s: %s\n", key, value)
-		}
-	}
+	wg.Wait()
 }
 
 func main() {
 	done := make(chan struct{})
 	go SetupServer(PORT, done)
 	<-done
-	for range 10 {
-		request("http://localhost:3000")
-	}
 }

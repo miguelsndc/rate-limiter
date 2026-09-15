@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-type Config struct {
+type TokenBucketConfig struct {
 	Capacity       int
 	RefillInterval time.Duration
 	Wait           bool
@@ -20,11 +20,11 @@ type Bucket struct {
 
 type TokenBucketLimiter struct {
 	mu      sync.Mutex
-	config  Config
+	config  TokenBucketConfig
 	buckets map[string]*Bucket
 }
 
-func createBucket(capacity int) *Bucket {
+func createTokenBucket(capacity int) *Bucket {
 	return &Bucket{
 		tokens:     capacity,
 		lastRefill: time.Now(),
@@ -36,7 +36,7 @@ func (l *TokenBucketLimiter) getBucket(key string) *Bucket {
 	defer l.mu.Unlock()
 	bucket, exists := l.buckets[key]
 	if !exists {
-		bucket = createBucket(l.config.Capacity)
+		bucket = createTokenBucket(l.config.Capacity)
 		l.buckets[key] = bucket
 	}
 	return bucket
@@ -97,13 +97,10 @@ func (l *TokenBucketLimiter) Allow(key string) (bool, time.Duration) {
 	return true, 0
 }
 
-func NewTokenBucketLimiter(cfg Config) *TokenBucketLimiter {
+func NewTokenBucketLimiter(cfg TokenBucketConfig) *TokenBucketLimiter {
 	return &TokenBucketLimiter{
 		config:  cfg,
 		buckets: make(map[string]*Bucket),
 	}
 }
 
-func (l *TokenBucketLimiter) ShouldWait() bool {
-	return l.config.Wait
-}

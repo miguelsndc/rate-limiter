@@ -5,8 +5,10 @@ import (
 	"time"
 )
 
-type RateLimiter interface {
-    Allow(key string) (bool, time.Duration)
+type RateLimiterWaiter interface {
     Wait(ctx context.Context, key string) error
-    ShouldWait() bool
+}
+
+type RateLimiterPolicer interface {
+    Allow(key string) (bool, time.Duration)
 }
