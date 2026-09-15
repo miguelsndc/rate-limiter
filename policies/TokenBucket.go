@@ -1,7 +1,6 @@
 package policies
 
 import (
-	"context"
 	"sync"
 	"time"
 )
@@ -42,42 +41,6 @@ func (l *TokenBucketLimiter) getBucket(key string) *Bucket {
 	return bucket
 }
 
-func (l *TokenBucketLimiter) Wait(ctx context.Context, key string) error {
-	bucket := l.getBucket(key)
-	bucket.mu.Lock()
-	now := time.Now()
-	elapsed := now.Sub(bucket.lastRefill)
-	refilled := int(elapsed / l.config.RefillInterval)
-	bucket.tokens = min(l.config.Capacity, bucket.tokens+refilled)
-	if refilled > 0 {
-		bucket.lastRefill = bucket.lastRefill.Add(time.Duration(refilled) * l.config.RefillInterval)
-	}
-
-	var waitTime time.Duration
-	if bucket.tokens > 0 {
-		bucket.tokens--
-	} else {
-		nextAvailable := bucket.lastRefill.Add(l.config.RefillInterval)
-		waitTime = nextAvailable.Sub(now)
-		bucket.lastRefill = nextAvailable
-	}
-	bucket.mu.Unlock()
-
-	if waitTime == 0 {
-		return nil
-	}
-
-	timer := time.NewTimer(waitTime)
-	defer timer.Stop()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
-}
-
 func (l *TokenBucketLimiter) Allow(key string) (bool, time.Duration) {
 	bucket := l.getBucket(key)
 	bucket.mu.Lock()
@@ -103,4 +66,3 @@ func NewTokenBucketLimiter(cfg TokenBucketConfig) *TokenBucketLimiter {
 		buckets: make(map[string]*Bucket),
 	}
 }
-

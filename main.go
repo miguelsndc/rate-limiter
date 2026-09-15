@@ -11,26 +11,7 @@ import (
 	"sync"
 )
 
-func WaiterMiddleware(lim policies.RateLimiterWaiter, next http.HandlerFunc) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ip, _, err := net.SplitHostPort(r.RemoteAddr)
-		if err != nil {
-			http.Error(w, "Invalid remote address", http.StatusInternalServerError)
-			return
-		}
-		if err := lim.Wait(r.Context(), ip); err != nil {
-			http.Error(
-				w,
-				"Request canceled or timed out",
-				http.StatusRequestTimeout,
-			)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-func PolicerMiddleware(lim policies.RateLimiterPolicer, next http.HandlerFunc) http.HandlerFunc {
+func PolicerMiddleware(lim policies.IRateLimiter, next http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ip, _, err := net.SplitHostPort(r.RemoteAddr)
 		if err != nil {
