@@ -37,7 +37,7 @@ func (dq *Deque[T]) Empty() bool {
 	return dq.size == 0
 }
 
-func (dq *Deque[T]) Pophead() T {
+func (dq *Deque[T]) PopFront() T {
     if dq.size == 0 {
 		panic("Can't pop an empty deque")
 	}
@@ -48,14 +48,14 @@ func (dq *Deque[T]) Pophead() T {
 	return value
 }
 
-func NewDeque[T any](dq Deque[T]) *Deque[T] {
-	if dq.capacity <= 0 {
+func NewDeque[T any](cap int) *Deque[T] {
+	if cap <= 0 {
 		panic("Deque must have positive capacity.")
 	}
 	return &Deque[T] {
-		capacity: dq.capacity,
+		capacity: cap,
 		size: 0,
 		head: 0,
-		buffer: make([]T, dq.capacity),
+		buffer: make([]T, cap),
 	}
 }
