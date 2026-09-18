@@ -6,18 +6,18 @@ import (
 )
 
 type LeakyBucketConfig struct {
-	Capacity       float64
-	LeakRate       float64
+	Capacity float64
+	LeakRate float64
 }
 
 type LeakyBucket struct {
-	mu         sync.Mutex
+	mu         sync.RWMutex
 	waterLevel float64
 	lastUpdate time.Time
 }
 
 type LeakyBucketLimiter struct {
-	mu      sync.Mutex
+	mu      sync.RWMutex
 	config  LeakyBucketConfig
 	buckets map[string]*LeakyBucket
 }
@@ -30,13 +30,20 @@ func createLeakyBucket(capacity float64) *LeakyBucket {
 }
 
 func (l *LeakyBucketLimiter) getBucket(key string) *LeakyBucket {
+	l.mu.RLock()
+	bucket, exists := l.buckets[key]
+	l.mu.RUnlock()
+	if exists {
+		return bucket
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	bucket, exists := l.buckets[key]
-	if !exists {
-		bucket = createLeakyBucket(l.config.Capacity)
-		l.buckets[key] = bucket
+	bucket, exists = l.buckets[key]
+	if exists {
+		return bucket
 	}
+	bucket = createLeakyBucket(l.config.Capacity)
+	l.buckets[key] = bucket
 	return bucket
 }
 
@@ -46,14 +53,14 @@ func (l *LeakyBucketLimiter) Allow(key string) (bool, time.Duration) {
 	defer bucket.mu.Unlock()
 
 	now := time.Now()
-	leakRate := l.config.LeakRate 
+	leakRate := l.config.LeakRate
 	capacity := l.config.Capacity
 
 	elapsed := now.Sub(bucket.lastUpdate).Seconds()
-	bucket.waterLevel = max(0, bucket.waterLevel - elapsed * leakRate)
+	bucket.waterLevel = max(0, bucket.waterLevel-elapsed*leakRate)
 	bucket.lastUpdate = now
-	if bucket.waterLevel + 1 > capacity {
-	    required := bucket.waterLevel + 1 - l.config.Capacity
+	if bucket.waterLevel+1 > capacity {
+		required := bucket.waterLevel + 1 - l.config.Capacity
 		waitSeconds := required / l.config.LeakRate
 		return false, time.Duration(waitSeconds * float64(time.Second))
 	}
@@ -68,4 +75,3 @@ func NewLeakyBucketLimiter(cfg LeakyBucketConfig) *LeakyBucketLimiter {
 		buckets: make(map[string]*LeakyBucket),
 	}
 }
-

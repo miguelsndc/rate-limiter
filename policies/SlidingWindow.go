@@ -18,19 +18,26 @@ func createWindow(limit int) *window {
 }
 
 type SlidingWindowLimiter struct {
-	mu      sync.Mutex
+	mu      sync.RWMutex
 	config  SlidingWindowConfig
 	windows map[string]*window
 }
 
 func (sw *SlidingWindowLimiter) getWindow(key string) *window {
+	sw.mu.RLock()
+	window, exists := sw.windows[key]
+	sw.mu.RUnlock()
+	if exists {
+		return window
+	}
 	sw.mu.Lock()
 	defer sw.mu.Unlock()
-	window, exists := sw.windows[key]
-	if !exists {
-		window = createWindow(sw.config.Limit)
-		sw.windows[key] = window
+	window, exists = sw.windows[key]
+	if exists {
+		return window
 	}
+	window = createWindow(sw.config.Limit)
+	sw.windows[key] = window
 	return window
 }
 

@@ -17,7 +17,7 @@ type Bucket struct {
 }
 
 type TokenBucketLimiter struct {
-	mu      sync.Mutex
+	mu      sync.RWMutex
 	config  TokenBucketConfig
 	buckets map[string]*Bucket
 }
@@ -30,13 +30,20 @@ func createTokenBucket(capacity int) *Bucket {
 }
 
 func (l *TokenBucketLimiter) getBucket(key string) *Bucket {
+	l.mu.RLock()
+	bucket, exists := l.buckets[key]
+	l.mu.RUnlock()
+	if exists {
+		return bucket
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	bucket, exists := l.buckets[key]
-	if !exists {
-		bucket = createTokenBucket(l.config.Capacity)
-		l.buckets[key] = bucket
+	bucket, exists = l.buckets[key]
+	if exists {
+		return bucket
 	}
+	bucket = createTokenBucket(l.config.Capacity)
+	l.buckets[key] = bucket
 	return bucket
 }
 

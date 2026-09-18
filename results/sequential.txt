@@ -1,0 +1,21 @@
+goos: linux
+goarch: amd64
+pkg: rate-limiter/policies
+cpu: Intel(R) Core(TM) i3-7020U CPU @ 2.30GHz
+BenchmarkSaturatedSequential/token_bucket-4         	 6543813	       182.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSaturatedSequential/token_bucket-4         	 6572906	       181.6 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSaturatedSequential/token_bucket-4         	 6403869	       190.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSaturatedSequential/token_bucket-4         	 6273517	       176.6 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSaturatedSequential/token_bucket-4         	 6521388	       185.8 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSaturatedSequential/leaky_bucket-4         	 6455607	       181.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSaturatedSequential/leaky_bucket-4         	 6045522	       179.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSaturatedSequential/leaky_bucket-4         	 6360004	       181.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSaturatedSequential/leaky_bucket-4         	 6601442	       181.8 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSaturatedSequential/leaky_bucket-4         	 6098781	       182.6 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSaturatedSequential/sliding_window-4       	 7184730	       160.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSaturatedSequential/sliding_window-4       	 6950913	       155.6 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSaturatedSequential/sliding_window-4       	 7520686	       159.3 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSaturatedSequential/sliding_window-4       	 7758037	       147.4 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSaturatedSequential/sliding_window-4       	 8262619	       145.3 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	rate-limiter/policies	20.214s
