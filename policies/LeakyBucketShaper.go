@@ -9,7 +9,7 @@ import (
 
 var ErrorLeakyBucketQueueFull = errors.New("leaky buket queue is full")
 
-type LeakyBucketQueueConfig struct {
+type LeakyBucketShaperConfig struct {
 	QueueCapacity int
 	LeakInterval  time.Duration
 }
@@ -23,13 +23,13 @@ type requestsQueue struct {
 	requests chan queuedRequest
 }
 
-type LeakyBucketQueue struct {
+type LeakyBucketShaper struct {
 	mu     sync.Mutex
-	config LeakyBucketQueueConfig
+	config LeakyBucketShaperConfig
 	queues map[string]*requestsQueue
 }
 
-func (l *LeakyBucketQueue) runQueue(
+func (l *LeakyBucketShaper) runQueue(
 	queue *requestsQueue,
 ) {
 	ticker := time.NewTicker(l.config.LeakInterval)
@@ -50,7 +50,7 @@ func (l *LeakyBucketQueue) runQueue(
 	}
 }
 
-func (l *LeakyBucketQueue) Wait(ctx context.Context, key string) error {
+func (l *LeakyBucketShaper) Wait(ctx context.Context, key string) error {
 	queue := l.getQueue(key)
 	request := queuedRequest{
 		ctx:   ctx,
@@ -67,12 +67,12 @@ func (l *LeakyBucketQueue) Wait(ctx context.Context, key string) error {
 	select {
 	case <-request.ready:
 		return nil
-	case <- ctx.Done():
+	case <-ctx.Done():
 		return ctx.Err()
 	}
 }
 
-func (l *LeakyBucketQueue) getQueue(key string) *requestsQueue {
+func (l *LeakyBucketShaper) getQueue(key string) *requestsQueue {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -89,14 +89,14 @@ func (l *LeakyBucketQueue) getQueue(key string) *requestsQueue {
 	return queue
 }
 
-func NewLeakyBucketQueue(cfg LeakyBucketQueueConfig) *LeakyBucketQueue {
+func NewLeakyBucketShaper(cfg LeakyBucketShaperConfig) *LeakyBucketShaper {
 	if cfg.QueueCapacity <= 0 {
 		panic("queue capacity must be positive")
 	}
 	if cfg.LeakInterval <= 0 {
 		panic("leaking interval must be positive")
 	}
-	return &LeakyBucketQueue{
+	return &LeakyBucketShaper{
 		config: cfg,
 		queues: make(map[string]*requestsQueue),
 	}

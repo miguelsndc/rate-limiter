@@ -12,8 +12,8 @@ func TestLeakyBucketQueueSpacesRequest(t *testing.T) {
 	const requests = 3
 	const interval = 30 * time.Millisecond
 
-	queue := NewLeakyBucketQueue(
-		LeakyBucketQueueConfig{
+	shaper := NewLeakyBucketShaper(
+		LeakyBucketShaperConfig{
 			QueueCapacity: requests,
 			LeakInterval:  interval,
 		},
@@ -31,7 +31,7 @@ func TestLeakyBucketQueueSpacesRequest(t *testing.T) {
 
 	for range requests {
 		go func() {
-			err := queue.Wait(ctx, "client")
+			err := shaper.Wait(ctx, "client")
 			errors <- err
 			completions <- time.Since(start)
 		}()
@@ -57,8 +57,8 @@ func TestLeakyBucketQueueSpacesRequest(t *testing.T) {
 
 func TestLeakyBucketQueueRejectsWhenQueueFull(t *testing.T) {
 	const key = "client"
-	lim := NewLeakyBucketQueue(
-		LeakyBucketQueueConfig{
+	lim := NewLeakyBucketShaper(
+		LeakyBucketShaperConfig{
 			QueueCapacity: 1,
 			LeakInterval:  time.Hour,
 		},
@@ -95,8 +95,8 @@ func TestLeakyBucketQueueRejectsWhenQueueFull(t *testing.T) {
 func TestLeakyBucketShaperRespectsCancellation(
 	t *testing.T,
 ) {
-	lim := NewLeakyBucketQueue(
-		LeakyBucketQueueConfig{
+	lim := NewLeakyBucketShaper(
+		LeakyBucketShaperConfig{
 			QueueCapacity: 1,
 			LeakInterval:  time.Second,
 		},

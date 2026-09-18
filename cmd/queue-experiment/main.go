@@ -21,7 +21,7 @@ func main() {
 		limit    = 10
 		interval = 100 * time.Millisecond
 	)
-	lim := policies.NewLeakyBucketQueue(policies.LeakyBucketQueueConfig{
+	lim := policies.NewLeakyBucketShaper(policies.LeakyBucketShaperConfig{
 		QueueCapacity: limit,
 		LeakInterval:  interval,
 	})

@@ -83,11 +83,11 @@ func baseHandler(w http.ResponseWriter, r *http.Request) {
 const PORT = 3000
 
 func SetupServer(port int, done chan struct{}) {
-	cfg := policies.LeakyBucketQueueConfig{
+	cfg := policies.LeakyBucketShaperConfig{
 		LeakInterval:  time.Second,
 		QueueCapacity: 10,
 	}
-	lim := policies.NewLeakyBucketQueue(cfg)
+	lim := policies.NewLeakyBucketShaper(cfg)
 	mux := http.NewServeMux()
 	mux.Handle("/", WaiterMiddleware(lim, http.HandlerFunc(baseHandler)))
 	actualPort := ":" + strconv.Itoa(port)
