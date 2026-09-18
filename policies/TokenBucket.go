@@ -8,7 +8,6 @@ import (
 type TokenBucketConfig struct {
 	Capacity       int
 	RefillInterval time.Duration
-	Wait           bool
 }
 
 type Bucket struct {

@@ -9,6 +9,7 @@ import (
 	"rate-limiter/policies"
 	"strconv"
 	"sync"
+	"time"
 )
 
 func PolicerMiddleware(lim policies.IRateLimiter, next http.HandlerFunc) http.HandlerFunc {
@@ -37,11 +38,11 @@ func baseHandler(w http.ResponseWriter, r *http.Request) {
 const PORT = 3000
 
 func SetupServer(port int, done chan struct{}) {
-	cfg := policies.LeakyBucketConfig{
-		Capacity: 5,
-		LeakRate: 1,
+	cfg := policies.SlidingWindowConfig{
+		Limit: 10,
+		Window: 5 * time.Second,
 	}
-	lim := policies.NewLeakyBucketLimiter(cfg)
+	lim := policies.NewSlidingWindow(cfg)
 	mux := http.NewServeMux()
 	mux.Handle("/", PolicerMiddleware(lim, http.HandlerFunc(baseHandler)))
 	actualPort := ":" + strconv.Itoa(port)
@@ -82,4 +83,9 @@ func main() {
 	done := make(chan struct{})
 	go SetupServer(PORT, done)
 	<-done
+	for range 5 {
+		burst(10)
+		fmt.Println("Esperando 2 segundos")
+		time.Sleep(2 * time.Second)
+	}
 }
