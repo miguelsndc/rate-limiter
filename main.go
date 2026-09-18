@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-func PolicerMiddleware(lim policies.IRateLimiter, next http.HandlerFunc) http.HandlerFunc {
+func PolicerMiddleware(lim policies.IRateLimiterPolicer, next http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ip, _, err := net.SplitHostPort(r.RemoteAddr)
 		if err != nil {
@@ -39,7 +39,7 @@ const PORT = 3000
 
 func SetupServer(port int, done chan struct{}) {
 	cfg := policies.SlidingWindowConfig{
-		Limit: 10,
+		Limit:  10,
 		Window: 5 * time.Second,
 	}
 	lim := policies.NewSlidingWindow(cfg)

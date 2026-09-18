@@ -15,7 +15,7 @@ func TestLimitersConcurrentBurst(t *testing.T) {
 
 	testCases := []struct {
 		name    string
-		limiter IRateLimiter
+		limiter IRateLimiterPolicer
 	}{
 
 		{
